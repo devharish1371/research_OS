@@ -1,0 +1,7 @@
+
+# Claude project kit runtime (the ledger itself stays tracked)
+project_ops/.local/
+.claude/settings.local.json
+CLAUDE.local.md
+.DS_Store
+__pycache__/

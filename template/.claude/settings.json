@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR}/project_ops/projectctl.py\" hook SessionStart", "timeout": 15}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR}/project_ops/projectctl.py\" hook Stop", "timeout": 15}]}],
+    "SessionEnd": [{"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR}/project_ops/projectctl.py\" hook SessionEnd", "timeout": 5}]}]
+  }
+}

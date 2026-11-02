@@ -1,0 +1,9 @@
+#!/bin/sh
+# Print saved status, then open Claude Code with a greeting request.
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$root"
+./projectctl status || true
+command -v claude >/dev/null 2>&1 || { echo "Claude Code not on PATH: https://code.claude.com/docs/en/quickstart" >&2; exit 127; }
+[ "$#" -gt 0 ] && exec claude "$@"
+exec claude "Welcome me back with the last saved activity and the next action from the project ledger. Do not start new work just to greet me."
