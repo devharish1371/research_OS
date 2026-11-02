@@ -23,7 +23,7 @@ It was distilled from a real research workspace (recursive-reasoning interpretab
 8. [Skills: the slash commands](#8-skills-the-slash-commands)
 9. [A worked example session](#9-a-worked-example-session)
 10. [Design principles](#10-design-principles-and-why)
-11. [Customising for your project](#11-customising-for-your-project)
+11. [Customising and extending for your project](#11-customising-and-extending-for-your-project)
 12. [Working with friends and teams](#12-working-with-friends-and-teams)
 13. [Troubleshooting and FAQ](#13-troubleshooting-and-faq)
 14. [Limits and honesty](#14-limits-and-honesty)
@@ -101,6 +101,8 @@ my-project/
     ├── projectctl.py             # the ledger, hooks and CLI (stdlib only)
     ├── START_HERE.md             # command cheat sheet
     ├── SYSTEM_DESIGN.md          # why it is built this way
+    ├── EXTENDING.md              # how to add your own tools, skills and docs
+    ├── templates/                # starter tool, skill, protocol, runbook, data dictionary
     ├── state.json                # created on install: the canonical memory
     ├── logs/                     # created on first write
     │   ├── events.jsonl          #   append-only hash-chained history
@@ -305,18 +307,28 @@ No re-explaining. If someone edited `results/baseline.json` overnight, the statu
 
 ---
 
-## 11. Customising for your project
+## 11. Customising and extending for your project
 
-- **`CLAUDE.md` Project facts table:** add where your protocols, datasets, papers and runbooks live.
-- **Project-specific rules:** add bullets under "Working contract", for example "never modify files used by a running job" or "all times in IST".
-- **New skills:** create `.claude/skills/<name>/SKILL.md` with frontmatter (`name`, `description`) and a short procedure, then add a row to `CLAUDE.md`.
-- **Domain tools:** put scripts next to `projectctl` (cluster access, evaluators, report builders). Keep credentials out of them; use your OS keychain.
-- **More claim or task statuses:** edit the `CLAIM_STATUS` / `TASK_STATUS` sets at the top of `projectctl.py` and run the tests.
-- **Version the history:** commit `project_ops/state.json` and `project_ops/logs/`; `project_ops/.local/` stays ignored.
+The kit is the foundation; your project adds its own tools, skills and documents. The full guide, installed in every project as `project_ops/EXTENDING.md`, is [template/project_ops/EXTENDING.md](template/project_ops/EXTENDING.md). Summary:
 
-Personal preferences that apply to *all* your projects (for example your timezone or tone) belong in Claude Code's user-level memory or `~/.claude/CLAUDE.md`, not in this kit.
+| You need... | Add a... | Where |
+|---|---|---|
+| A rule that must always apply | bullet in the contract | `CLAUDE.md` |
+| A repeatable action (evaluate, query a server, build a report) | **tool** | `tools/` (start from `project_ops/templates/tool.py`) |
+| A repeatable way of working | **skill** | `.claude/skills/<name>/SKILL.md` (start from `templates/SKILL.md`) |
+| Reference facts and procedures | **doc** | `docs/` (templates: `protocol.md`, `runbook.md`, `data_dictionary.md`) |
+| Automatic behaviour | hook | `.claude/settings.json` |
+| Your preferences across all projects | user memory | `~/.claude/`, not this kit |
 
----
+**Adding a tool, in short:** copy the template, make it read-only by default, have it write a result file with the input hash, exact metric, denominator, protocol reference and timestamp, keep secrets in the OS keychain (never in arguments or files), add a small test, then register it: a row in the `CLAUDE.md` table plus a ledger task with an acceptance criterion.
+
+**Adding a skill, in short:** a precise `description` (when to use it), numbered steps pointing to docs and tools, a clear "stop and ask" line for risky steps, and a final step that records the outcome with `projectctl`. Keep it short; link to docs for detail.
+
+**Adding docs, in short:** put them in `docs/`, give each a status line (`proposed`, `frozen <date>`, `superseded`), reference sources by path and page, link ledger ids instead of copying changing numbers, and link the doc from `CLAUDE.md` rather than loading it every session.
+
+The guide also covers hooks and permissions, environments and reproducibility, a complete worked example (an evaluation tool, protocol and `/run-eval` skill), a pre-use checklist and common anti-patterns.
+
+Other small tweaks: add project-specific rules under "Working contract" (for example "never modify files used by a running job" or "all times in IST"); edit the `CLAIM_STATUS` / `TASK_STATUS` sets in `projectctl.py` and rerun the tests; commit `project_ops/state.json` and `project_ops/logs/` to version the history.
 
 ## 12. Working with friends and teams
 
@@ -377,6 +389,8 @@ research_OS/
         ├── projectctl.py
         ├── START_HERE.md
         ├── SYSTEM_DESIGN.md
+        ├── EXTENDING.md
+        ├── templates/ (tool.py, SKILL.md, protocol.md, runbook.md, data_dictionary.md)
         └── tests/test_projectctl.py
 ```
 

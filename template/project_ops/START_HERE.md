@@ -22,3 +22,5 @@ Plain `claude` in this folder also loads `CLAUDE.md` and the SessionStart hook. 
 | `./projectctl verify` | Check structure, journal chain and evidence hashes |
 
 Evidence paths are relative to the project root; `--evidence` can repeat. Slash commands: `/project-status`, `/plan-task`, `/evidence-audit`, `/decision-record`, `/project-handoff`.
+
+To add your own tools, skills and docs, follow `project_ops/EXTENDING.md`.

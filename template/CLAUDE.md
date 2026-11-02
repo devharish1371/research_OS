@@ -24,6 +24,7 @@ At the first response, greet the user with the last saved activity and next acti
 |---|---|
 | Setup / commands | `project_ops/START_HERE.md` |
 | How the ledger and reasoning discipline work | `project_ops/SYSTEM_DESIGN.md` |
+| Adding project tools, skills and docs | `project_ops/EXTENDING.md` (templates in `project_ops/templates/`) |
 | Domain notes, protocols, data dictionary | _add paths here_ |
 
 Skills: `/project-status`, `/plan-task`, `/evidence-audit`, `/decision-record`, `/project-handoff`.
