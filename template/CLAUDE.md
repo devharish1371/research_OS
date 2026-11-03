@@ -25,4 +25,6 @@ At startup, use the supplied memory packet to state the last saved activity and 
 | Project tools, skills and docs | `project_ops/EXTENDING.md` |
 | Domain protocols, source maps, data dictionary | _add paths here_ |
 
-Skills: `/project-status`, `/plan-task`, `/evidence-audit`, `/decision-record`, `/project-handoff`.
+For initial onboarding or a refresh from supplied documents/code/repositories, use `/project-bootstrap` to inventory and read selectively, then populate source-linked memory. Keep the detailed source map outside this contract.
+
+Skills: `/project-bootstrap`, `/project-status`, `/plan-task`, `/evidence-audit`, `/decision-record`, `/project-handoff`.

@@ -99,6 +99,52 @@ For another project, repeat the installation with that project's path, name and 
 
 If your project already has a **v1 research_OS installation**, follow the [upgrade instructions](#upgrading-an-existing-installation) below instead. Fresh v2 installations do not need migration.
 
+## Populate memory from existing docs, code and repositories
+
+Yes: install research_OS in the **primary project**, give Claude Code access to the relevant material, and ask it to populate the ledger. You do not need to paste entire documents or repositories into chat. Use local paths, accessible repository URLs, or documents saved in the project; identify which repositories are implementation targets versus references.
+
+For sibling repositories or a separate document directory, Claude Code supports additional directories through `--add-dir` ([CLI reference](https://code.claude.com/docs/en/cli-reference)):
+
+```sh
+cd "/path/to/primary-project"
+claude --add-dir "/path/to/reference-repo" "/path/to/project-docs"
+```
+
+Only include directories relevant to this project. Supplying a URL does not guarantee access to a private repository; use an accessible local checkout or the account/tools already available to Claude. For PDFs or other binary documents, extraction depends on the readers installed in that environment.
+
+Invoke the bundled skill with a concrete goal and source roles:
+
+```text
+/project-bootstrap
+
+Goal: Build the evaluation pipeline described in docs/requirements.md.
+Primary implementation repo: this directory.
+Project documents: docs/ and /path/to/project-docs.
+Reference implementation: /path/to/reference-repo; use as a reference.
+
+Populate research_OS efficiently. Inventory first, then read only the
+sections and code needed to understand the goal and plan the first task.
+Record source-linked facts, requirements, useful procedures, conflicts,
+unknowns and tasks with acceptance criteria. Distinguish document claims
+from observed behavior and my explicit instructions. Avoid duplicate
+records and large copied summaries. Save a source map and a handoff.
+Report what you reviewed, what you deferred and verification results.
+Do not start implementing the project in this onboarding pass.
+```
+
+The [project-bootstrap skill](template/.claude/skills/project-bootstrap/SKILL.md) instructs Claude to:
+
+- Inventory filenames and headings before reading content; skip irrelevant generated files and bulk data.
+- Start with up to 20 relevant files/sections and roughly 30,000 source characters, expanding only for a concrete missing fact. These are adjustable reading targets, not exact token limits.
+- Save a compact source map and a small set of useful ledger records, with explicit reading coverage and source provenance.
+- Keep external-source evidence as small local snapshots with origin/revision details. Evidence verification checks those snapshots, not the current external repository or URL.
+- Search existing memory before writing; on subsequent passes, inspect changed sources and update affected records instead of duplicating them.
+- Keep untested claims marked as reported, preserve contradictions, verify the ledger, and save the next action.
+
+The skill gives Claude a workflow; the ledger does not autonomously parse or import documents. A successful integrity check does not prove the documents are correct or the project's tests pass. Run `/project-bootstrap` again when you supply new material or want a deeper pass.
+
+For an existing v2 installation, pull this kit and rerun its installer to receive the new skill. Preserve/merge any customized `CLAUDE.md` instructions as described above. Claude skills can be invoked by name or selected when relevant ([skills documentation](https://code.claude.com/docs/en/skills)).
+
 ## Upgrading an existing installation
 
 ```sh
@@ -285,7 +331,7 @@ Hooks do not extract facts from chats. Unrecorded reasoning can still be lost. C
 
 ## Skills and extension
 
-The bundled skills are `/project-status`, `/plan-task`, `/evidence-audit`, `/decision-record`, and `/project-handoff`. Bodies load when used; their discovery metadata still has a small context cost.
+The bundled skills are `/project-bootstrap`, `/project-status`, `/plan-task`, `/evidence-audit`, `/decision-record`, and `/project-handoff`. Bodies load when used; their discovery metadata still has a small context cost.
 
 Add deterministic project tools under `tools/`, source-linked domain references under `docs/`, and specific workflows under `.claude/skills/`. See [EXTENDING.md](template/project_ops/EXTENDING.md). Keep mutable facts in the ledger and detailed evidence in artifacts; keep the always-loaded contract short.
 

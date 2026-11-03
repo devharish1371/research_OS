@@ -8,6 +8,8 @@ Python 3.9+, macOS/Linux or WSL. No network or paid model required for the ledge
 ./start-project
 ```
 
+To populate memory from existing material, invoke `/project-bootstrap` in Claude Code with your goal, source paths/URLs, and each repository's role. It inventories first, reads relevant sections, records source-linked facts and tasks, and saves a handoff. It does not automatically ingest every file or verify unrun results. Use it again for changed sources; it checks existing records before adding more.
+
 | Operation | Command |
 |---|---|
 | Task-specific context | `./projectctl context --task T1 --query 'baseline' --check-evidence` |
