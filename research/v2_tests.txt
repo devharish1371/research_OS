@@ -1,0 +1,44 @@
+test_checkpoint_corruption_detected (test_projectctl.Ctl.test_checkpoint_corruption_detected) ... ok
+test_cli_byte_budgets_and_oversized_show (test_projectctl.Ctl.test_cli_byte_budgets_and_oversized_show) ... ok
+test_concurrent_writes_serialized (test_projectctl.Ctl.test_concurrent_writes_serialized) ... ok
+test_constraints_require_user_attribution (test_projectctl.Ctl.test_constraints_require_user_attribution) ... ok
+test_context_budget_unicode_and_constraints (test_projectctl.Ctl.test_context_budget_unicode_and_constraints) ... ok
+test_cycle_and_bad_schema (test_projectctl.Ctl.test_cycle_and_bad_schema) ... ok
+test_done_evidence_dependencies_acceptance (test_projectctl.Ctl.test_done_evidence_dependencies_acceptance) ... ok
+test_empty_and_truncated_journal_rejected (test_projectctl.Ctl.test_empty_and_truncated_journal_rejected) ... ok
+test_evidence_all_active_groups_and_strict_exit (test_projectctl.Ctl.test_evidence_all_active_groups_and_strict_exit) ... ok
+test_fingerprint_large_files_logs_and_no_external_content (test_projectctl.Ctl.test_fingerprint_large_files_logs_and_no_external_content) ... ok
+test_hash_dedup_and_external_symlink (test_projectctl.Ctl.test_hash_dedup_and_external_symlink) ... ok
+test_index_cannot_override_record_content (test_projectctl.Ctl.test_index_cannot_override_record_content) ... ok
+test_no_whole_state_snapshot_per_write (test_projectctl.Ctl.test_no_whole_state_snapshot_per_write) ... ok
+test_numeric_nan_rejected (test_projectctl.Ctl.test_numeric_nan_rejected) ... ok
+test_operation_id_and_revision_guard (test_projectctl.Ctl.test_operation_id_and_revision_guard) ... ok
+test_related_conflicting_evidence_in_context (test_projectctl.Ctl.test_related_conflicting_evidence_in_context) ... ok
+test_replay_and_crash_after_event (test_projectctl.Ctl.test_replay_and_crash_after_event) ... ok
+test_required_handoff_not_clipped_inside_optional_bundle (test_projectctl.Ctl.test_required_handoff_not_clipped_inside_optional_bundle) ... ok
+test_resume_compact_and_other_session_handoff (test_projectctl.Ctl.test_resume_compact_and_other_session_handoff) ... ok
+test_search_history_temporal_and_lifecycle (test_projectctl.Ctl.test_search_history_temporal_and_lifecycle) ... ok
+test_search_query_syntax_and_no_fts_fallback (test_projectctl.Ctl.test_search_query_syntax_and_no_fts_fallback) ... ok
+test_secret_fields_rejected (test_projectctl.Ctl.test_secret_fields_rejected) ... ok
+test_stop_acknowledges_retry_then_catches_next_turn (test_projectctl.Ctl.test_stop_acknowledges_retry_then_catches_next_turn) ... ok
+test_store_rejects_unreplayable_deletion_and_stale_base (test_projectctl.Ctl.test_store_rejects_unreplayable_deletion_and_stale_base) ... ok
+test_structured_numeric_claims (test_projectctl.Ctl.test_structured_numeric_claims) ... ok
+test_untrusted_export_never_injected (test_projectctl.Ctl.test_untrusted_export_never_injected) ... ok
+test_verified_revision_needs_new_evidence (test_projectctl.Ctl.test_verified_revision_needs_new_evidence) ... ok
+
+----------------------------------------------------------------------
+Ran 27 tests in 5.152s
+
+OK
+test_fresh_install_repeat_and_dry_run (test_install_migrate.Integration.test_fresh_install_repeat_and_dry_run) ... ok
+test_invalid_settings_no_partial_install (test_install_migrate.Integration.test_invalid_settings_no_partial_install) ... ok
+test_merge_settings_preserve_contract (test_install_migrate.Integration.test_merge_settings_preserve_contract) ... ok
+test_migration_refuses_corruption (test_install_migrate.Integration.test_migration_refuses_corruption) ... ok
+test_runtime_conflict_backup_and_preflight (test_install_migrate.Integration.test_runtime_conflict_backup_and_preflight) ... ok
+test_symlink_metadata_refused_before_write (test_install_migrate.Integration.test_symlink_metadata_refused_before_write) ... ok
+test_v1_migration_preserves_history_and_recovers_refs (test_install_migrate.Integration.test_v1_migration_preserves_history_and_recovers_refs) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.894s
+
+OK

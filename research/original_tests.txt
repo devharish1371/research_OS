@@ -1,0 +1,11 @@
+test_direct_edit_detected (test_projectctl.Ctl.test_direct_edit_detected) ... ok
+test_done_requires_evidence_and_dependencies (test_projectctl.Ctl.test_done_requires_evidence_and_dependencies) ... ok
+test_evidence_drift_reported (test_projectctl.Ctl.test_evidence_drift_reported) ... ok
+test_hooks (test_projectctl.Ctl.test_hooks) ... ok
+test_secret_rejected (test_projectctl.Ctl.test_secret_rejected) ... ok
+test_verified_claim_needs_evidence (test_projectctl.Ctl.test_verified_claim_needs_evidence) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.870s
+
+OK

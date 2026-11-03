@@ -1,26 +1,41 @@
 # Start here
 
-Requires Python 3.9+ (stdlib only) and Claude Code. No paid service, no credentials stored.
+Python 3.9+, macOS/Linux or WSL. No network or paid model required for the ledger.
 
-```bash
-./projectctl status          # saved state, next action
-./start-project              # print status, then open Claude with a greeting request
+```sh
+./projectctl doctor
+./projectctl status
+./start-project
 ```
 
-Plain `claude` in this folder also loads `CLAUDE.md` and the SessionStart hook. Review and trust the project when asked; `/hooks` shows the hooks.
-
-| Command | Purpose |
+| Operation | Command |
 |---|---|
-| `./projectctl init --name N --goal G` | One-time ledger creation (the installer does this) |
-| `./projectctl status` | Greeting: last activity, next action, blocked tasks, drift |
-| `./projectctl task add ID 'Title' --depends A,B --acceptance '...'` | Add a task |
-| `./projectctl task set ID in_progress\|blocked\|done\|deferred --note '...' --evidence PATH` | Update; `done` requires evidence and finished dependencies |
-| `./projectctl claim ID STATUS --text '...' --scope '...' --evidence PATH` | Register or revise a typed claim |
-| `./projectctl decide ID --question --choice --source user\|assistant_proposal\|external --why` | Decision journal |
-| `./projectctl note --summary '...'` | Append an observation without changing the handoff |
-| `./projectctl handoff --summary '...' --next '...' --evidence PATH` | Save where the next session resumes |
-| `./projectctl verify` | Check structure, journal chain and evidence hashes |
+| Task-specific context | `./projectctl context --task T1 --query 'baseline' --check-evidence` |
+| Search | `./projectctl search 'baseline split' --limit 8` |
+| Exact record / history | `./projectctl show C1`; `./projectctl history C1 --limit 10` |
+| Task | `./projectctl task add T1 'Title' --acceptance 'Observable result'` |
+| Complete task | `./projectctl task set T1 done --evidence results/run.json` |
+| Claim | `./projectctl claim C1 reported --text 'Result' --scope 'Run and dataset' --evidence results/run.json` |
+| Decision | `./projectctl decide D1 --question 'Question' --choice 'Choice' --source user --why 'Reason'` |
+| Observation | `./projectctl note --id N1 --summary 'What happened' --evidence results/run.json` |
+| Procedure | `./projectctl remember M1 'Procedure' --kind procedure --source tool_observation` |
+| Constraint | `./projectctl remember RULE1 'Constraint' --kind constraint --source user` |
+| Handoff | `./projectctl handoff --summary 'Actual outcome' --next 'Concrete action' --evidence results/run.json` |
+| Verification | `./projectctl verify --json` |
+| Temporal view | `./projectctl search 'query' --as-of 2026-10-01T00:00:00Z` |
+| Validity | `./projectctl search 'query' --valid-at 2026-10-01` |
+| Lifecycle | `./projectctl archive T1 --reason 'Done'`; `./projectctl restore T1 --reason 'Needed'` |
+| Retrieval exclusion | `./projectctl forget N1 --reason 'Exclude'` |
+| Recovery | `./projectctl recover` (backs up export and replays valid committed history) |
+| Rebuild search | `./projectctl index rebuild` |
+| Upgrade v1 | `./projectctl migrate --dry-run`, then `./projectctl migrate` |
 
-Evidence paths are relative to the project root; `--evidence` can repeat. Slash commands: `/project-status`, `/plan-task`, `/evidence-audit`, `/decision-record`, `/project-handoff`.
+`status` defaults to a 4,800-byte packet; `context` defaults to 12,000 bytes. Override with `--max-bytes 8000`. These are UTF-8 byte budgets, not exact token counts. Required-context overflow must be resolved before acting. Hook startup output uses the smaller budget.
 
-To add your own tools, skills and docs, follow `project_ops/EXTENDING.md`.
+Full verification exits 0 for clean, 1 for integrity/schema errors, 2 for active evidence drift. Quick verification returns 3 because evidence was not hashed. `--warn-only` explicitly permits a zero exit despite drift. Routine status labels evidence unverified; `context --check-evidence` checks selected references.
+
+Evidence paths must resolve inside the project. `verified` needs scope and evidence. Changing a verified claim requires an explicit evidence review. Use `--expect-revision N` to reject stale edits. Use `--operation-id KEY` before a mutation command for idempotent retries.
+
+Four hooks: SessionStart, Stop, PreCompact, SessionEnd. Confirm with `/hooks`. Compaction saves only already-recorded state. For concurrent sessions use `handoff --session-id SESSION_ID`; otherwise handoffs are project-wide.
+
+Archive and forget preserve history. Forget excludes both current and historical search, but explicit `show`/`history` remain available. Neither command provides physical deletion.

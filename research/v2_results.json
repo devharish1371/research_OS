@@ -1,0 +1,263 @@
+{
+  "measured_at": "2026-11-03T05:27:27.470624+00:00",
+  "python": "3.13.7 (main, Aug 14 2025, 11:12:11) [Clang 17.0.0 (clang-1700.0.13.3)]",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "method": "Synthetic local fixtures. Function timings are warm in-process unless CLI is named. Token counts and model task success are not measured. tracemalloc is Python allocations, not RSS.",
+  "source_sha256": {
+    "memory.py": "87563654bab343650e7e49976405758eed5b97fb28779fa6ac52788aabec529c",
+    "ledger.py": "b791096dec677f222195f686c574b1c5ce3cb456dd3814b470739f8d149ae7b3",
+    "projectctl.py": "28ca0896d71bb73a54a8c9e45397f8c3b13baa56513d4d293634de95067c4b48"
+  },
+  "context_growth": [
+    {
+      "blocked_tasks": 10,
+      "output_bytes": 2412,
+      "p50_ms": 0.027,
+      "p95_ms": 0.029,
+      "n": 20,
+      "samples_ms": [
+        0.034,
+        0.029,
+        0.028,
+        0.028,
+        0.027,
+        0.027,
+        0.027,
+        0.027,
+        0.027,
+        0.025,
+        0.025,
+        0.025,
+        0.027,
+        0.027,
+        0.027,
+        0.027,
+        0.027,
+        0.027,
+        0.027,
+        0.027
+      ]
+    },
+    {
+      "blocked_tasks": 100,
+      "output_bytes": 4514,
+      "p50_ms": 0.079,
+      "p95_ms": 0.08,
+      "n": 20,
+      "samples_ms": [
+        0.079,
+        0.08,
+        0.08,
+        0.079,
+        0.08,
+        0.079,
+        0.08,
+        0.079,
+        0.079,
+        0.08,
+        0.079,
+        0.08,
+        0.074,
+        0.078,
+        0.079,
+        0.079,
+        0.079,
+        0.079,
+        0.079,
+        0.08
+      ]
+    },
+    {
+      "blocked_tasks": 1000,
+      "output_bytes": 4515,
+      "p50_ms": 0.183,
+      "p95_ms": 0.193,
+      "n": 20,
+      "samples_ms": [
+        0.198,
+        0.187,
+        0.185,
+        0.182,
+        0.183,
+        0.183,
+        0.184,
+        0.193,
+        0.192,
+        0.184,
+        0.183,
+        0.183,
+        0.184,
+        0.183,
+        0.182,
+        0.182,
+        0.182,
+        0.183,
+        0.182,
+        0.182
+      ]
+    },
+    {
+      "blocked_tasks": 10000,
+      "output_bytes": 4516,
+      "p50_ms": 1.26,
+      "p95_ms": 1.392,
+      "n": 20,
+      "samples_ms": [
+        1.392,
+        1.28,
+        1.261,
+        1.457,
+        1.289,
+        1.302,
+        1.273,
+        1.26,
+        1.266,
+        1.265,
+        1.247,
+        1.248,
+        1.234,
+        1.244,
+        1.231,
+        1.242,
+        1.305,
+        1.233,
+        1.232,
+        1.24
+      ]
+    }
+  ],
+  "dependency_validation": [
+    {
+      "tasks": 100,
+      "p50_ms": 0.757,
+      "p95_ms": 0.793,
+      "n": 7,
+      "samples_ms": [
+        0.793,
+        0.765,
+        0.757,
+        0.757,
+        0.758,
+        0.757,
+        0.753
+      ]
+    },
+    {
+      "tasks": 1000,
+      "p50_ms": 7.528,
+      "p95_ms": 7.601,
+      "n": 7,
+      "samples_ms": [
+        7.563,
+        7.502,
+        7.601,
+        7.528,
+        7.49,
+        7.555,
+        7.481
+      ]
+    },
+    {
+      "tasks": 5000,
+      "p50_ms": 38.986,
+      "p95_ms": 39.52,
+      "n": 7,
+      "samples_ms": [
+        38.738,
+        39.296,
+        39.52,
+        38.864,
+        39.204,
+        38.986,
+        38.548
+      ]
+    }
+  ],
+  "fts_query_10k_records": {
+    "p50_ms": 1.383,
+    "p95_ms": 1.599,
+    "n": 20,
+    "samples_ms": [
+      1.916,
+      1.566,
+      1.524,
+      1.398,
+      1.435,
+      1.458,
+      1.599,
+      1.408,
+      1.382,
+      1.345,
+      1.344,
+      1.385,
+      1.347,
+      1.354,
+      1.469,
+      1.368,
+      1.336,
+      1.38,
+      1.355,
+      1.358
+    ]
+  },
+  "retrieval_with_projection_sync_10k": {
+    "p50_ms": 15.172,
+    "p95_ms": 16.288,
+    "n": 10,
+    "samples_ms": [
+      16.288,
+      15.197,
+      15.203,
+      15.284,
+      15.148,
+      14.982,
+      15.426,
+      14.72,
+      14.767,
+      15.138
+    ]
+  },
+  "indexed_record_count": 10001,
+  "storage_growth": [
+    {
+      "tasks": 25,
+      "state_bytes": 12973,
+      "checkpoint_count": 1,
+      "checkpoint_bytes": 964,
+      "journal_bytes": 22586
+    },
+    {
+      "tasks": 50,
+      "state_bytes": 25248,
+      "checkpoint_count": 1,
+      "checkpoint_bytes": 964,
+      "journal_bytes": 44161
+    },
+    {
+      "tasks": 100,
+      "state_bytes": 49800,
+      "checkpoint_count": 2,
+      "checkpoint_bytes": 53306,
+      "journal_bytes": 87315
+    },
+    {
+      "tasks": 200,
+      "state_bytes": 99000,
+      "checkpoint_count": 3,
+      "checkpoint_bytes": 157648,
+      "journal_bytes": 173915
+    }
+  ],
+  "journal_replay_allocations": [
+    {
+      "events": 1000,
+      "journal_bytes": 385436,
+      "peak_traced_python_allocation_bytes_not_rss": 26291
+    },
+    {
+      "events": 10000,
+      "journal_bytes": 3868438,
+      "peak_traced_python_allocation_bytes_not_rss": 26299
+    }
+  ]
+}

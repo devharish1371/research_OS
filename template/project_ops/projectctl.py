@@ -1,353 +1,360 @@
 #!/usr/bin/env python3
-"""Dependency-free project ledger for Claude Code sessions (Python >=3.9).
-
-One canonical state file, an append-only hash-chained journal, a SessionStart greeting
-and a Stop reminder to record a handoff. No network, no transcripts, no credentials.
-Hashes detect accidental edits and establish file identity; they do not prove a claim.
-"""
+"""Local evidence-aware project memory. No network, model calls, or transcript reads."""
 import argparse
-import contextlib
-import datetime as dt
-import fcntl
+import copy
 import hashlib
 import json
-import os
 from pathlib import Path
-import re
+import sqlite3
 import sys
-import tempfile
 import uuid
 
-OPS = Path(__file__).resolve().parent
-ROOT = OPS.parent
-STATE = OPS / "state.json"
-JOURNAL = OPS / "logs/events.jsonl"
-SNAPSHOTS = OPS / "logs/snapshots"
-LOCAL = OPS / ".local"
-TASK_STATUS = {"todo", "in_progress", "blocked", "done", "deferred"}
-CLAIM_STATUS = {"verified", "reported", "hypothesis", "proposed", "disputed", "unknown", "withdrawn"}
-DECISION_SOURCES = {"user", "assistant_proposal", "external"}
-SKIP_DIRS = {".git", "node_modules", "venv", ".venv", "__pycache__", ".local", "logs", "dist", "build", ".next"}
+from ledger import (Store, CLAIM_STATUS, TASK_STATUS, SOURCES, RELATIONS, atomic_json,
+                    digest, find, now, read_json, records, revised, timestamp, validate)
+from memory import Index, bounded_json, fingerprint, packet, retrieve
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
-def now():
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+def render(value):
+    print(json.dumps(value, indent=2, ensure_ascii=False))
 
 
-def digest(obj):
-    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+def bounds(value):
+    number = int(value)
+    if not 1 <= number <= 50:
+        raise argparse.ArgumentTypeError("limit must be between 1 and 50")
+    return number
 
 
-def file_hash(path):
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for block in iter(lambda: f.read(1 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
-
-
-def read_json(path):
-    return json.loads(path.read_text())
-
-
-def atomic_json(path, obj):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".write-", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(obj, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-    finally:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-
-
-def check_text(value):
-    """Heuristic guard: never record secrets or essays in the ledger."""
-    if re.search(r"(?i)(password|passwd|otp|api.?key|secret|token)\s*[:=]\s*\S+", value) \
-            or "PRIVATE KEY-----" in value or re.search(r"\bsk-(?:ant-)?[A-Za-z0-9_-]{16,}", value):
-        raise ValueError("Possible credential rejected; never record secrets. Link an artifact instead.")
-    if len(value) > 4000:
-        raise ValueError("Keep ledger prose under 4,000 characters; link a detailed file.")
-
-
-def evidence(paths):
-    out = []
-    for p in paths or []:
-        lp = (ROOT / p).resolve()
-        if not lp.is_relative_to(ROOT) or not lp.is_file():
-            raise ValueError(f"Evidence must be an existing file inside the project: {p}")
-        out.append({"path": str(lp.relative_to(ROOT)), "sha256": file_hash(lp)})
-    return out
-
-
-@contextlib.contextmanager
-def locked():
-    LOCAL.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with (LOCAL / "state.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        yield
-
-
-def journal_errors(state):
-    if not JOURNAL.exists():
-        return [] if not state.get("handoff") else ["journal missing"]
-    rows = [json.loads(x) for x in JOURNAL.read_text().splitlines() if x.strip()]
-    prev = "0" * 64
-    for row in rows:
-        body = {k: v for k, v in row.items() if k != "hash"}
-        if row.get("previous") != prev or digest(body) != row.get("hash"):
-            return [f"journal chain broken at event {row.get('id')}"]
-        prev = row["hash"]
-    if rows and rows[-1]["state_sha256"] != digest(state):
-        return ["state.json differs from the last journal event (edited directly or interrupted write); inspect logs/snapshots"]
-    return []
-
-
-def validate(state):
-    errors, ids = [], set()
-    for group in ("tasks", "claims", "decisions"):
-        for rec in state.get(group, []):
-            if rec["id"] in ids:
-                errors.append(f"duplicate id {rec['id']}")
-            ids.add(rec["id"])
-    done = {t["id"] for t in state["tasks"] if t["status"] == "done"}
-    for t in state["tasks"]:
-        if t["status"] not in TASK_STATUS:
-            errors.append(f"{t['id']}: bad status")
-        for d in t.get("depends_on", []):
-            if d not in {x["id"] for x in state["tasks"]}:
-                errors.append(f"{t['id']}: unknown dependency {d}")
-        if t["status"] == "done" and not all(d in done for d in t.get("depends_on", [])):
-            errors.append(f"{t['id']}: done but dependencies are not done")
-    for c in state["claims"]:
-        if c["status"] not in CLAIM_STATUS:
-            errors.append(f"{c['id']}: bad claim status")
-        if c["status"] == "verified" and not c.get("evidence"):
-            errors.append(f"{c['id']}: verified claim needs evidence")
-    return errors
-
-
-def commit(state, kind, summary, refs=()):
-    """Caller holds the lock. Journal first, then atomic state replace, so interruption is detectable."""
-    check_text(summary)
-    old = read_json(STATE) if STATE.exists() else None
-    if old is not None:
-        problems = journal_errors(old)
-        if problems:
-            raise ValueError("; ".join(problems))
-    state["updated_at"] = now()
-    problems = validate(state)
-    if problems:
-        raise ValueError("; ".join(problems))
-    if old is not None:
-        atomic_json(SNAPSHOTS / (digest(old) + ".json"), old)
-    previous = "0" * 64
-    if JOURNAL.exists() and JOURNAL.read_text().strip():
-        previous = json.loads(JOURNAL.read_text().splitlines()[-1])["hash"]
-    row = {"id": str(uuid.uuid4()), "at": now(), "kind": kind, "summary": summary,
-           "evidence": list(refs), "previous": previous, "state_sha256": digest(state)}
-    row["hash"] = digest(row)
-    atomic_json(SNAPSHOTS / (digest(state) + ".json"), state)
-    JOURNAL.parent.mkdir(parents=True, exist_ok=True)
-    with JOURNAL.open("a") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        f.flush()
-        os.fsync(f.fileno())
-    atomic_json(STATE, state)
-
-
-def load():
-    if not STATE.exists():
-        sys.exit("No state yet. Run: ./projectctl init --name NAME --goal 'one sentence'")
-    return read_json(STATE)
-
-
-def find(state, group, rid):
-    for rec in state[group]:
-        if rec["id"] == rid:
-            return rec
-    raise ValueError(f"No {group[:-1]} with id {rid}")
-
-
-def evidence_drift(state):
-    drift = []
-    for group in ("tasks", "claims", "decisions"):
-        for rec in state.get(group, []):
-            for ref in rec.get("evidence", []):
-                p = ROOT / ref["path"]
-                if not p.is_file() or file_hash(p) != ref["sha256"]:
-                    drift.append((rec["id"], ref["path"]))
-    return drift
-
-
-def next_tasks(state, limit=4):
-    done = {t["id"] for t in state["tasks"] if t["status"] == "done"}
-    ready = [t for t in state["tasks"] if t["status"] in {"in_progress", "todo"} and all(d in done for d in t.get("depends_on", []))]
-    ready.sort(key=lambda t: t["status"] != "in_progress")
-    return ready[:limit]
-
-
-def status_text(state):
-    h = state["handoff"]
-    lines = [f"Project: {state['project']['name']} — {state['project']['goal']}",
-             f"State saved: {state['updated_at']}", "Last activity: " + h["summary"], "Next: " + h["next_action"]]
-    blocked = [t for t in state["tasks"] if t["status"] == "blocked"]
-    if blocked:
-        lines.append("Blocked: " + "; ".join(f"{t['id']} ({t.get('note', t['title'])[:80]})" for t in blocked))
-    drift = evidence_drift(state)
-    if drift:
-        lines.append(f"EVIDENCE DRIFT ({len(drift)} refs; review before trusting dependent claims): " + "; ".join(sorted({p for _, p in drift})))
-    disputed = [c["id"] for c in state["claims"] if c["status"] in {"disputed", "unknown"}]
-    if disputed:
-        lines.append("Open claims (disputed/unknown): " + ", ".join(disputed))
-    lines.extend(f"{t['id']} [{t['status']}]: {t['title']}" for t in next_tasks(state))
-    return "\n".join(lines)
-
-
-def fingerprint():
-    """Bounded hash of small project files, to notice work done without a handoff."""
-    files = {}
-    for dirpath, dirnames, filenames in os.walk(ROOT):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".git")]
-        for name in filenames:
-            p = Path(dirpath) / name
-            try:
-                if p.stat().st_size < (1 << 20) and p != STATE:
-                    files[str(p.relative_to(ROOT))] = file_hash(p)
-            except OSError:
-                pass
-            if len(files) > 5000:
-                return digest(files)
-    return digest(files)
-
-
-def hook(event):
-    payload = json.load(sys.stdin)
-    sid = hashlib.sha256(str(payload.get("session_id", "unknown")).encode()).hexdigest()[:24]
-    marker = LOCAL / "sessions" / (sid + ".json")
-    if not STATE.exists():
-        if event == "SessionStart":
-            print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext":
-                "No project ledger yet. Ask the user for the project name and one-sentence goal, then run ./projectctl init --name NAME --goal GOAL and fill the placeholders in CLAUDE.md."}}))
-        return
-    state = read_json(STATE)
-    if event == "SessionStart":
-        if not (payload.get("source") in {"compact", "resume"} and marker.exists()):
-            atomic_json(marker, {"at": now(), "fingerprint": fingerprint(), "handoff": digest(state["handoff"])})
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext":
-            status_text(state) + "\nGreet the user briefly with last activity and next action; read only task-relevant files. Save progress with ./projectctl handoff before finishing."}}))
-    elif event == "Stop":
-        if payload.get("stop_hook_active"):
-            return  # one reminder at most; never trap the session in a loop
-        errors = validate(state) + journal_errors(state)
-        prior = read_json(marker) if marker.exists() else {}
-        changed = prior and prior.get("fingerprint") != fingerprint() and prior.get("handoff") == digest(state["handoff"])
-        if errors or changed:
-            print(json.dumps({"decision": "block", "reason": "Handoff check: " + ("; ".join(errors[:3]) if errors else
-                "project files changed without an updated handoff. Run ./projectctl handoff with the real outcome, evidence and next action; do not invent completed work.")}))
-        else:
-            atomic_json(marker, {"at": now(), "fingerprint": fingerprint(), "handoff": digest(state["handoff"])})
-    elif event == "SessionEnd":
-        atomic_json(LOCAL / "last_session.json", {"ended_at": now(), "session_id_hash": sid, "state_sha256": digest(state)})
-
-
-def main():
+def parser():
     ap = argparse.ArgumentParser(prog="projectctl", description=__doc__)
+    ap.add_argument("--operation-id", help="idempotency key for a mutation; place before subcommand")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("init"); p.add_argument("--name", required=True); p.add_argument("--goal", required=True)
-    sub.add_parser("status"); sub.add_parser("verify")
-    p = sub.add_parser("task", help="task add ID TITLE | task set ID STATUS")
+    for name in ("status", "context"):
+        p = sub.add_parser(name)
+        p.add_argument("--max-bytes", type=int, default=None)
+        p.add_argument("--budget-tokens", type=int, help="estimate only: translates to 4 UTF-8 bytes/token; no exact tokenizer")
+        p.add_argument("--task"); p.add_argument("--query"); p.add_argument("--check-evidence", action="store_true")
+    p = sub.add_parser("verify")
+    p.add_argument("--mode", choices=["full", "quick"], default="full"); p.add_argument("--json", action="store_true")
+    p.add_argument("--warn-only", action="store_true", help="compatibility: drift is a warning, not exit 2")
+    p = sub.add_parser("show"); p.add_argument("id"); p.add_argument("--revision", type=int); p.add_argument("--json", action="store_true"); p.add_argument("--full", action="store_true", help="allow an explicitly unbounded record export")
+    p = sub.add_parser("history"); p.add_argument("id"); p.add_argument("--limit", type=bounds, default=10); p.add_argument("--json", action="store_true")
+    p = sub.add_parser("search"); p.add_argument("query"); p.add_argument("--limit", type=bounds, default=8)
+    p.add_argument("--scope"); p.add_argument("--kind"); p.add_argument("--as-of", help="recording-time snapshot (ISO date/time)")
+    p.add_argument("--valid-at", help="filter validity intervals; independent of recording time")
+    p.add_argument("--include-archived", action="store_true"); p.add_argument("--json", action="store_true")
+    p = sub.add_parser("index"); p.add_argument("action", choices=["rebuild"])
+    sub.add_parser("checkpoint"); sub.add_parser("recover"); sub.add_parser("doctor")
+    p = sub.add_parser("migrate"); p.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("task")
     p.add_argument("action", choices=["add", "set"]); p.add_argument("id"); p.add_argument("arg")
-    p.add_argument("--depends", default=""); p.add_argument("--acceptance", default="")
-    p.add_argument("--note", default=""); p.add_argument("--evidence", action="append")
-    p = sub.add_parser("claim", help="Add or revise a claim with an explicit epistemic status")
-    p.add_argument("id"); p.add_argument("status", choices=sorted(CLAIM_STATUS))
-    p.add_argument("--text"); p.add_argument("--scope", default=""); p.add_argument("--evidence", action="append")
-    p = sub.add_parser("decide", help="Record a decision with reasoning and who made it")
-    p.add_argument("id"); p.add_argument("--question", required=True); p.add_argument("--choice", required=True)
-    p.add_argument("--source", required=True, choices=sorted(DECISION_SOURCES)); p.add_argument("--why", required=True)
-    p = sub.add_parser("note"); p.add_argument("--summary", required=True); p.add_argument("--evidence", action="append")
-    p = sub.add_parser("handoff"); p.add_argument("--summary", required=True); p.add_argument("--next", required=True); p.add_argument("--evidence", action="append")
-    p = sub.add_parser("hook"); p.add_argument("event", choices=["SessionStart", "Stop", "SessionEnd"])
-    a = ap.parse_args()
+    p.add_argument("--depends", default=""); p.add_argument("--acceptance"); p.add_argument("--note")
+    metadata(p)
+    p = sub.add_parser("claim"); p.add_argument("id"); p.add_argument("status", choices=sorted(CLAIM_STATUS))
+    p.add_argument("--text"); p.add_argument("--scope"); p.add_argument("--metric"); p.add_argument("--value", type=float)
+    p.add_argument("--denominator", type=float); p.add_argument("--unit"); p.add_argument("--protocol")
+    metadata(p)
+    p = sub.add_parser("decide"); p.add_argument("id"); p.add_argument("--question", required=True)
+    p.add_argument("--choice", required=True); p.add_argument("--why", required=True)
+    metadata(p, source_required=True)
+    p = sub.add_parser("note"); p.add_argument("--id"); p.add_argument("--summary", required=True); metadata(p)
+    p = sub.add_parser("handoff"); p.add_argument("--summary", required=True); p.add_argument("--next", required=True)
+    p.add_argument("--session-id", help="optional explicit session attribution")
+    metadata(p)
+    p = sub.add_parser("remember"); p.add_argument("id"); p.add_argument("text")
+    p.add_argument("--kind", choices=["observation", "procedure", "constraint", "source"], default="observation")
+    p.add_argument("--scope", default=""); metadata(p)
+    for name in ("archive", "restore", "forget"):
+        p = sub.add_parser(name); p.add_argument("id"); p.add_argument("--reason", required=True)
+        p.add_argument("--expect-revision", type=int)
+    p = sub.add_parser("hook"); p.add_argument("event", choices=["SessionStart", "Stop", "SessionEnd", "PreCompact"])
+    return ap
 
+
+def metadata(p, source_required=False):
+    p.add_argument("--evidence", action="append")
+    p.add_argument("--source", choices=sorted(SOURCES), required=source_required)
+    p.add_argument("--expect-revision", type=int)
+    p.add_argument("--valid-from"); p.add_argument("--valid-to")
+    p.add_argument("--link", action="append", help="RELATION:ID; relations: " + ", ".join(sorted(RELATIONS)))
+
+
+def apply_metadata(rec, old, args, store):
+    if args.expect_revision is not None and (old is None or old["revision"] != args.expect_revision):
+        raise ValueError("Revision conflict; read the current record before retrying")
+    if args.source:
+        rec["source"] = args.source
+    if args.evidence:
+        rec["evidence"] = store.evidence(args.evidence)
+    for attr in ("valid_from", "valid_to"):
+        value = getattr(args, attr)
+        if value is not None:
+            timestamp(value)
+            rec[attr] = value
+    if args.link:
+        links = []
+        for value in args.link:
+            relation, separator, rid = value.partition(":")
+            if not separator or relation not in RELATIONS:
+                raise ValueError("Links must be RELATION:ID")
+            links.append({"relation": relation, "id": rid})
+        rec["links"] = links
+    return revised(rec, old)
+
+
+def mutation(store, state, args):
+    cmd = args.cmd
+    if cmd == "task":
+        if args.action == "add":
+            if any(r["id"] == args.id for _, r in records(state)):
+                raise ValueError(f"ID {args.id} already exists")
+            if not args.acceptance or not args.acceptance.strip():
+                raise ValueError("New tasks require a nonempty --acceptance criterion")
+            rec = {"id": args.id, "title": args.arg, "status": "todo", "acceptance": args.acceptance,
+                   "depends_on": [x.strip() for x in args.depends.split(",") if x.strip()]}
+            state["tasks"].append(apply_metadata(rec, None, args, store))
+        else:
+            group, rec = find(state, args.id)
+            if group != "tasks" or args.arg not in TASK_STATUS:
+                raise ValueError("Task ID/status invalid")
+            old = copy.deepcopy(rec)
+            if args.arg == "done" and not args.evidence:
+                raise ValueError("Done requires freshly supplied --evidence")
+            rec["status"] = args.arg
+            if args.note is not None:
+                rec["note"] = args.note
+            if args.acceptance is not None:
+                rec["acceptance"] = args.acceptance
+            apply_metadata(rec, old, args, store)
+    elif cmd == "claim":
+        try:
+            group, rec = find(state, args.id)
+            if group != "claims":
+                raise ValueError("ID belongs to a different record kind")
+            old = copy.deepcopy(rec)
+        except ValueError as exc:
+            if not str(exc).startswith("No record"):
+                raise
+            if not args.text:
+                raise ValueError("New claims require --text")
+            rec, old = {"id": args.id}, None
+            state["claims"].append(rec)
+        changed = old is not None and ((args.text is not None and args.text != old["text"]) or (args.scope is not None and args.scope != old.get("scope")) or args.metric is not None or (args.source is not None and args.source != old.get("source")) or any(getattr(args, key) is not None and getattr(args, key) != old.get(key) for key in ("valid_from", "valid_to")))
+        if changed:
+            rec["evidence"] = []
+            rec.pop("metric", None)
+        if args.status == "verified" and (changed or old is None or old["status"] != "verified") and not args.evidence:
+            raise ValueError("New/revised verification requires explicit --evidence and --scope")
+        rec["status"] = args.status
+        if args.text is not None:
+            rec["text"] = args.text
+        if args.scope is not None:
+            rec["scope"] = args.scope
+        if any(getattr(args, k) is not None for k in ("metric", "value", "denominator", "unit", "protocol")):
+            if any(getattr(args, k) is None for k in ("metric", "value", "denominator", "unit", "protocol")):
+                raise ValueError("Numeric claims need --metric --value --denominator --unit --protocol together")
+            rec["metric"] = {"name": args.metric, "value": args.value, "denominator": args.denominator, "unit": args.unit, "protocol": args.protocol}
+        apply_metadata(rec, old, args, store)
+        if rec["status"] == "verified" and store.drift(state, {rec["id"]}):
+            raise ValueError("Verified evidence is stale; review it and explicitly supply evidence")
+    elif cmd == "decide":
+        rec = {"id": args.id, "question": args.question, "choice": args.choice, "why": args.why}
+        state["decisions"].append(apply_metadata(rec, None, args, store))
+    elif cmd == "note":
+        rec = {"id": args.id or "N-" + uuid.uuid4().hex[:12], "text": args.summary}
+        state["notes"].append(apply_metadata(rec, None, args, store))
+    elif cmd == "handoff":
+        old = copy.deepcopy(state["handoff"])
+        rec = {"id": old["id"], "created_at": old["created_at"], "summary": args.summary, "next_action": args.next}
+        if args.session_id:
+            rec["session_id_hash"] = hashlib.sha256(args.session_id.encode()).hexdigest()[:24]
+        state["handoff"] = apply_metadata(rec, old, args, store)
+    elif cmd == "remember":
+        try:
+            group, rec = find(state, args.id)
+            if group != "memories":
+                raise ValueError("ID belongs to a different record kind")
+            old = copy.deepcopy(rec)
+        except ValueError as exc:
+            if not str(exc).startswith("No record"):
+                raise
+            rec, old = {"id": args.id}, None
+            state["memories"].append(rec)
+        if old and args.text != old.get("text"):
+            rec["evidence"] = []
+        rec.update(text=args.text, kind=args.kind, scope=args.scope)
+        apply_metadata(rec, old, args, store)
+    elif cmd in {"archive", "restore", "forget"}:
+        group, rec = find(state, args.id)
+        if group == "handoff":
+            raise ValueError("Replace the active handoff with handoff; it cannot be archived")
+        old = copy.deepcopy(rec)
+        if args.expect_revision is not None and old["revision"] != args.expect_revision:
+            raise ValueError("Revision conflict")
+        rec["lifecycle"] = {"archive": "archived", "restore": "active", "forget": "tombstoned"}[cmd]
+        rec["lifecycle_reason"] = args.reason
+        revised(rec, old)
+    else:
+        raise ValueError("Unknown mutation")
+
+
+def hook(store, event):
+    payload = json.load(sys.stdin)
+    sid = hashlib.sha256(str(payload.get("session_id", "unknown")).encode()).hexdigest()[:24]
+    marker = store.local / "sessions" / (sid + ".json")
+    if not store.state_path.exists():
+        if event == "SessionStart":
+            render({"hookSpecificOutput": {"hookEventName": event, "additionalContext": "No project ledger. Run projectctl init with the project name and goal."}})
+        return
+    with store.locked():
+        try:
+            state = store.load()
+        except (ValueError, OSError) as exc:
+            message = "Project memory integrity error: " + str(exc)[:600] + ". Do not rely on saved claims; run projectctl verify."
+            if event == "SessionStart":
+                render({"hookSpecificOutput": {"hookEventName": event, "additionalContext": message}})
+            elif event == "Stop" and not payload.get("stop_hook_active"):
+                render({"decision": "block", "reason": message})
+            return
+        if event == "PreCompact":
+            store.checkpoint(state)
+            return
+        if event == "SessionEnd":
+            atomic_json(store.local / "last_session.json", {"at": now(), "session_id_hash": sid, "version": state["version"]})
+            return
+        scan = fingerprint(store)
+        current = {"at": now(), "fingerprint": scan, "handoff_revision": state["handoff"]["revision"], "version": state["version"]}
+        if event == "SessionStart":
+            if not (payload.get("source") in {"compact", "resume"} and marker.exists()):
+                atomic_json(marker, current)
+            context = packet(store, state, budget=4800)
+            render({"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}})
+            return
+        prior = read_json(marker) if marker.exists() else None
+        handoff_changed = prior and prior["handoff_revision"] != current["handoff_revision"]
+        owner = state["handoff"].get("session_id_hash")
+        own_handoff = handoff_changed and (owner is None or owner == sid)
+        changed = prior is None or prior["fingerprint"]["digest"] != scan["digest"] or prior["version"] != state["version"]
+        uncertain = not scan["complete"] or (prior and not prior["fingerprint"].get("complete"))
+        if payload.get("stop_hook_active"):
+            # Acknowledge the handoff even on the no-loop retry; otherwise the next turn is missed.
+            if own_handoff:
+                atomic_json(marker, current)
+            return
+        if (changed or uncertain) and not own_handoff:
+            render({"decision": "block", "reason": "Project work changed or the change scan was incomplete. Save an accurate projectctl handoff with evidence and next action; no invented progress."})
+        else:
+            atomic_json(marker, current)
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
     try:
-        if a.cmd == "hook":
-            return hook(a.event)
-        if a.cmd == "init":
-            with locked():
-                if STATE.exists():
-                    sys.exit("Already initialised; refusing to overwrite state.json")
-                state = {"schema_version": 1, "updated_at": now(), "project": {"name": a.name, "goal": a.goal},
-                         "handoff": {"summary": "Project initialised; no work recorded yet.", "next_action": "Define the first tasks with ./projectctl task add.", "at": now()},
-                         "tasks": [], "claims": [], "decisions": []}
-                commit(state, "init", f"Initialised project {a.name}")
-            return print("Initialised.")
-        state = load()
-        if a.cmd == "status":
-            return print(status_text(state))
-        if a.cmd == "verify":
-            problems = validate(state) + journal_errors(state)
-            drift = evidence_drift(state)
-            for p in problems:
-                print("ERROR:", p)
-            for rid, path in drift:
-                print(f"DRIFT: {rid} cites changed/missing {path}")
-            print("OK" if not problems else f"{len(problems)} problem(s)")
-            return sys.exit(1 if problems else 0)
-        with locked():
-            state = load()
-            if a.cmd == "task":
-                if a.action == "add":
-                    if any(t["id"] == a.id for t in state["tasks"]):
-                        raise ValueError(f"Task {a.id} exists")
-                    check_text(a.arg + a.acceptance)
-                    state["tasks"].append({"id": a.id, "title": a.arg, "status": "todo", "acceptance": a.acceptance,
-                                           "depends_on": [d for d in a.depends.split(",") if d]})
-                    commit(state, "task_add", f"Task {a.id}: {a.arg}")
+        store = Store(ROOT)
+        if args.cmd == "hook":
+            hook(store, args.event)
+            return 0
+        with store.locked():
+            if args.cmd == "init":
+                store.init(args.name, args.goal)
+                print("Initialized schema v2.")
+                return 0
+            if args.cmd == "migrate":
+                render(store.migrate(args.dry_run)); return 0
+            if args.cmd == "recover":
+                state = store.recover(); print(f"Recovered committed state version {state['version']}; prior export backed up."); return 0
+            if args.cmd == "doctor":
+                db = sqlite3.connect(":memory:")
+                try:
+                    db.execute("CREATE VIRTUAL TABLE probe USING fts5(body)"); fts = True
+                except sqlite3.OperationalError:
+                    fts = False
+                finally:
+                    db.close()
+                settings = store.root / ".claude/settings.json"
+                render({"python": sys.version.split()[0], "sqlite": sqlite3.sqlite_version, "fts5": fts,
+                        "state_exists": store.state_path.exists(), "schema": read_json(store.state_path).get("schema_version") if store.state_path.exists() else None,
+                        "settings_exists": settings.exists(), "network_required": False,
+                        "integrity": "run verify", "change_detection": "bounded filesystem metadata, not a content audit"})
+                return 0
+            if args.cmd == "verify":
+                try:
+                    state = store.load(full=args.mode == "full")
+                    if args.mode == "full":
+                        store.verify_checkpoints()
+                    drift = store.drift(state) if args.mode == "full" else []
+                    result = {"integrity": "ok", "freshness": "stale" if drift else ("ok" if args.mode == "full" else "not_checked"),
+                              "coverage": "all-active-records" if args.mode == "full" else "journal-metadata-and-state",
+                              "drift": drift, "version": state["version"]}
+                    code = 2 if drift and not args.warn_only else (3 if args.mode == "quick" else 0)
+                except (ValueError, OSError) as exc:
+                    result, code = {"integrity": "error", "error": str(exc)}, 1
+                if args.json:
+                    render(result)
                 else:
-                    if a.arg not in TASK_STATUS:
-                        raise ValueError(f"Status must be one of {sorted(TASK_STATUS)}")
-                    t = find(state, "tasks", a.id)
-                    if a.arg == "done" and not a.evidence:
-                        raise ValueError("A task is done only with --evidence showing its acceptance criterion is met")
-                    t["status"] = a.arg
-                    if a.note:
-                        check_text(a.note)
-                        t["note"] = a.note
-                    if a.evidence:
-                        t["evidence"] = evidence(a.evidence)
-                    commit(state, "task_set", f"Task {a.id} -> {a.arg}", t.get("evidence", []))
-            elif a.cmd == "claim":
-                rec = next((c for c in state["claims"] if c["id"] == a.id), None)
-                if rec is None:
-                    if not a.text:
-                        raise ValueError("New claims need --text")
-                    rec = {"id": a.id}
-                    state["claims"].append(rec)
-                check_text((a.text or "") + a.scope)
-                rec.update({"status": a.status, "text": a.text or rec["text"], "scope": a.scope or rec.get("scope", ""),
-                            "evidence": evidence(a.evidence) or rec.get("evidence", []), "updated": now()})
-                commit(state, "claim", f"Claim {a.id} [{a.status}]", rec["evidence"])
-            elif a.cmd == "decide":
-                check_text(a.question + a.choice + a.why)
-                state["decisions"].append({"id": a.id, "date": now(), "question": a.question, "choice": a.choice, "source": a.source, "why": a.why})
-                commit(state, "decision", f"Decision {a.id} ({a.source}): {a.choice[:80]}")
-            elif a.cmd == "note":
-                commit(state, "note", a.summary, evidence(a.evidence))
-            elif a.cmd == "handoff":
-                refs = evidence(a.evidence)
-                check_text(a.summary + a.next)
-                state["handoff"] = {"summary": a.summary, "next_action": a.next, "at": now()}
-                commit(state, "handoff", a.summary, refs)
-            print("Recorded.")
-    except ValueError as exc:
-        sys.exit(f"Error: {exc}")
+                    print(result.get("error", result["integrity"].upper() + " | freshness=" + result.get("freshness", "unknown")))
+                    for ref in result.get("drift", []):
+                        print(f"DRIFT: {ref['id']} cites {ref['path']}")
+                return code
+            state = store.load()
+            if args.cmd in {"status", "context"}:
+                if args.budget_tokens is not None and args.budget_tokens <= 0:
+                    raise ValueError("budget-tokens must be positive")
+                budget = args.max_bytes if args.max_bytes is not None else (args.budget_tokens * 4 if args.budget_tokens else (4800 if args.cmd == "status" else 12000))
+                text = packet(store, state, budget, args.task, args.query, args.check_evidence)
+                sys.stdout.write(text + ("\n" if len(text.encode("utf-8")) < budget else "")); return 0
+            if args.cmd == "show":
+                if args.revision is not None:
+                    rec = next((r["record"] for r in store.history(args.id) if r["record"]["revision"] == args.revision), None)
+                    if rec is None:
+                        raise ValueError("No such record revision")
+                else:
+                    _, rec = find(state, args.id)
+                size = len((json.dumps(rec, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+                if size > 16000 and not args.full:
+                    render({"id": args.id, "error": "Record exceeds 16000-byte read budget", "bytes": size, "next": "Use show ID --full for explicit expansion"})
+                    return 3
+                render(rec); return 0
+            if args.cmd == "history":
+                history = store.history(args.id)
+                if not history:
+                    raise ValueError("No record history")
+                print(bounded_json(history[-args.limit:])); return 0
+            if args.cmd == "search":
+                tombstones = {r["id"] for _, r in records(state) if r["lifecycle"] == "tombstoned"}
+                if args.as_of:
+                    state, _ = store.replay(args.as_of)
+                hits = retrieve(store, state, args.query, limit=args.limit, scope=args.scope, kind=args.kind, valid_at=args.valid_at, include_archived=args.include_archived, transient=bool(args.as_of))
+                print(bounded_json([r for r in hits if r["id"] not in tombstones])); return 0
+            if args.cmd == "index":
+                # Rebuild a disposable index via a fresh file; never alter authoritative events.
+                if (store.local / "index.sqlite").exists():
+                    (store.local / "index.sqlite").unlink()
+                index = Index(store)
+                try:
+                    index.sync(state, force=True)
+                    print("Index rebuilt (FTS5)." if index.fts else "Index rebuilt (lexical fallback).")
+                finally:
+                    index.close()
+                return 0
+            if args.cmd == "checkpoint":
+                print(store.checkpoint(state)); return 0
+            request_hash = digest({k: v for k, v in vars(args).items() if k != "operation_id"})
+            prior = store.prior_operation(args.operation_id, request_hash)
+            if prior:
+                print(f"Already recorded at version {prior}."); return 0
+            old = copy.deepcopy(state)
+            mutation(store, state, args)
+            store.commit(state, old, args.cmd, f"{args.cmd}: {getattr(args, 'id', None) or state['handoff']['id']}", args.operation_id, request_hash)
+            print(f"Recorded version {state['version']}.")
+            return 0
+    except (ValueError, OSError, sqlite3.DatabaseError, KeyError, TypeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

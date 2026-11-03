@@ -1,0 +1,210 @@
+{
+  "measured_at_utc": "2026-11-02T19:20:39.730983+00:00",
+  "commit": "09951bf9d4acdc4def9332d6b7ec86736c21b9b3",
+  "python": "3.13.7 (main, Aug 14 2025, 11:12:11) [Clang 17.0.0 (clang-1700.0.13.3)]",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "method": "Synthetic temporary projects; function timings are warm in-process; CLI observations use subprocesses. No model quality, API token usage or cold disk latency measured.",
+  "observations": {
+    "handoff_evidence_drift_ignored": {
+      "exit_code": 0,
+      "stdout": "OK",
+      "stderr": ""
+    },
+    "claim_drift_exits_zero": {
+      "exit_code": 0,
+      "stdout": "DRIFT: C1 cites changed/missing evidence.txt\nOK",
+      "stderr": ""
+    },
+    "changed_verified_claim_reuses_old_evidence": {
+      "exit_code": 0,
+      "stdout": "Recorded.",
+      "stderr": ""
+    },
+    "self_dependency_accepted": {
+      "exit_code": 0,
+      "stdout": "Recorded.",
+      "stderr": ""
+    },
+    "done_with_empty_acceptance": {
+      "exit_code": 0,
+      "stdout": "Recorded.",
+      "stderr": ""
+    },
+    "empty_journal_passes_verify": {
+      "exit_code": 0,
+      "stdout": "OK",
+      "stderr": ""
+    },
+    "status_serves_unverified_state": {
+      "exit_code": 0,
+      "stdout": "Project: Audit fixture \u2014 Synthetic audit\nState saved: 2026-11-02T19:20:40+00:00\nLast activity: Project initialised; no work recorded yet.\nNext: DIRECTLY EDITED CONTENT",
+      "stderr": ""
+    },
+    "verify_catches_same_state_edit": {
+      "exit_code": 1,
+      "stdout": "ERROR: state.json differs from the last journal event (edited directly or interrupted write); inspect logs/snapshots\n1 problem(s)",
+      "stderr": ""
+    },
+    "second_turn_after_block_misses_handoff": {
+      "first_stop": {
+        "exit_code": 0,
+        "stdout": "{\"decision\": \"block\", \"reason\": \"Handoff check: project files changed without an updated handoff. Run ./projectctl handoff with the real outcome, evidence and next action; do not invent completed work.\"}",
+        "stderr": ""
+      },
+      "second_stop": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    "one_mib_edit_missed": true,
+    "fingerprint_reads_external_file_symlink": true,
+    "validator_accepts_done_without_evidence": [],
+    "hash_calls_for_100_refs_to_one_file": 100
+  },
+  "benchmarks": {
+    "status_growth": [
+      {
+        "blocked_tasks": 10,
+        "characters": 1072,
+        "utf8_bytes": 1074,
+        "rough_tokens_chars_div_4_not_tokenized": 268,
+        "median_ms": 0.003,
+        "samples_ms": [
+          0.01,
+          0.006,
+          0.004,
+          0.003,
+          0.003,
+          0.003,
+          0.003
+        ]
+      },
+      {
+        "blocked_tasks": 100,
+        "characters": 8992,
+        "utf8_bytes": 8994,
+        "rough_tokens_chars_div_4_not_tokenized": 2248,
+        "median_ms": 0.018,
+        "samples_ms": [
+          0.021,
+          0.019,
+          0.018,
+          0.018,
+          0.018,
+          0.018,
+          0.018
+        ]
+      },
+      {
+        "blocked_tasks": 1000,
+        "characters": 89092,
+        "utf8_bytes": 89094,
+        "rough_tokens_chars_div_4_not_tokenized": 22273,
+        "median_ms": 0.165,
+        "samples_ms": [
+          0.193,
+          0.177,
+          0.164,
+          0.165,
+          0.165,
+          0.165,
+          0.165
+        ]
+      },
+      {
+        "blocked_tasks": 10000,
+        "characters": 899092,
+        "utf8_bytes": 899094,
+        "rough_tokens_chars_div_4_not_tokenized": 224773,
+        "median_ms": 1.907,
+        "samples_ms": [
+          2.006,
+          1.907,
+          2.002,
+          1.955,
+          1.762,
+          1.809,
+          1.814
+        ]
+      }
+    ],
+    "dependency_validation": [
+      {
+        "tasks": 100,
+        "median_ms": 0.227,
+        "samples_ms": [
+          0.247,
+          0.227,
+          0.217
+        ]
+      },
+      {
+        "tasks": 1000,
+        "median_ms": 20.794,
+        "samples_ms": [
+          20.476,
+          21.165,
+          20.794
+        ]
+      },
+      {
+        "tasks": 5000,
+        "median_ms": 617.674,
+        "samples_ms": [
+          622.91,
+          617.674,
+          612.708
+        ]
+      }
+    ],
+    "snapshot_growth": [
+      {
+        "tasks": 25,
+        "state_bytes": 6635,
+        "snapshot_count": 26,
+        "snapshot_bytes": 91303,
+        "journal_bytes": 10168,
+        "single_commit_ms_not_distribution": 1.036
+      },
+      {
+        "tasks": 50,
+        "state_bytes": 12885,
+        "snapshot_count": 51,
+        "snapshot_bytes": 338428,
+        "journal_bytes": 19943,
+        "single_commit_ms_not_distribution": 1.566
+      },
+      {
+        "tasks": 100,
+        "state_bytes": 25386,
+        "snapshot_count": 101,
+        "snapshot_bytes": 1301429,
+        "journal_bytes": 39494,
+        "single_commit_ms_not_distribution": 2.438
+      },
+      {
+        "tasks": 200,
+        "state_bytes": 50486,
+        "snapshot_count": 201,
+        "snapshot_bytes": 5107579,
+        "journal_bytes": 78694,
+        "single_commit_ms_not_distribution": 4.335
+      }
+    ],
+    "journal_python_allocation": [
+      {
+        "events": 1000,
+        "journal_bytes": 366890,
+        "peak_traced_python_allocation_bytes_not_rss": 1657957,
+        "single_instrumented_ms": 23.181
+      },
+      {
+        "events": 10000,
+        "journal_bytes": 3678890,
+        "peak_traced_python_allocation_bytes_not_rss": 16699653,
+        "single_instrumented_ms": 224.299
+      }
+    ]
+  }
+}
