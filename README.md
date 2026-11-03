@@ -25,6 +25,7 @@ git clone https://github.com/devharish1371/research_OS.git ~/research_OS
 ~/research_OS/install.sh ~/work/my-project --name "My Project" --goal "One sentence goal"
 cd ~/work/my-project
 ./projectctl doctor
+./projectctl verify
 ./projectctl status
 ./start-project
 ```
@@ -32,6 +33,71 @@ cd ~/work/my-project
 Review and trust the project in Claude Code, then confirm the four hooks with `/hooks`. Fill the project-specific pointers in `CLAUDE.md`. For a project with its own customized contract, the installer preserves it and writes `CLAUDE.research_OS.md` for you to merge deliberately.
 
 The ledger CLI also works without Claude Code. `start-project` prints status and launches Claude; it does not perform project work by itself.
+
+## Use in any project
+
+Install research_OS inside each project you want it to remember. Each installation has its own tasks, evidence, decisions and handoffs; memory is not shared automatically between projects. You can use it for an existing codebase or a new research/project directory, regardless of the project's programming language.
+
+### 1. Install into your project
+
+Clone this repository once using the quick-start command above. Then replace `/path/to/your-project` below with your project's directory:
+
+```sh
+~/research_OS/install.sh "/path/to/your-project" \
+  --name "My Project" \
+  --goal "Describe what this project should accomplish"
+```
+
+If you cloned research_OS elsewhere, use that clone's `install.sh` path. The installer adds the memory tools, project instructions and Claude hooks. Existing customized `CLAUDE.md` instructions are preserved; merge the generated `CLAUDE.research_OS.md` into them so the agent knows the memory workflow. Existing unrelated Claude settings and hooks are retained.
+
+### 2. Check and start
+
+```sh
+cd "/path/to/your-project"
+./projectctl doctor
+./projectctl verify
+./start-project
+```
+
+In Claude Code, review and trust the project, then use `/hooks` to confirm SessionStart, Stop, PreCompact and SessionEnd. Claude Code must be installed for `start-project`; you can use `projectctl` independently without it.
+
+### 3. Give the agent its working instructions
+
+Start with a prompt like:
+
+> Read CLAUDE.md and use projectctl to track this project. Start by recording the tasks and acceptance criteria. Save evidence and a handoff after substantive work.
+
+Then describe the actual work you want done. The startup hook supplies a compact memory packet, and the Stop hook reminds the agent to save progress after changes. **Memory contains what gets recorded; it does not automatically save every conversation.**
+
+### 4. Record and retrieve memory directly
+
+These are example commands; record the actual outcome of your work:
+
+```sh
+# Define work with a concrete completion criterion.
+./projectctl task add T1 "Implement login" \
+  --acceptance "Login tests pass"
+
+# Retrieve relevant project memory.
+./projectctl status
+./projectctl search "login"
+./projectctl show T1
+
+# After implementing login, save the real outcome and next step.
+./projectctl handoff \
+  --summary "Login implemented; tests pending" \
+  --next "Run the login tests"
+```
+
+Add `--evidence path/to/artifact` when saving a handoff with supporting files. Mark a task done only after its acceptance criterion is met, with `task set T1 done --evidence path/to/test-results.txt` pointing to real evidence.
+
+### 5. Resume later or use another project
+
+Run `./start-project` again from the same project directory. The startup packet includes the saved handoff; use `search`, `show` or `context --task T1` for more detail. Keep the project's `project_ops/state.json` and `project_ops/logs/` history so its memory survives between sessions.
+
+For another project, repeat the installation with that project's path, name and goal. The automatic hooks target **Claude Code**. Other agents or humans can invoke the CLI explicitly; automatic integration with other agents is not installed.
+
+If your project already has a **v1 research_OS installation**, follow the [upgrade instructions](#upgrading-an-existing-installation) below instead. Fresh v2 installations do not need migration.
 
 ## Upgrading an existing installation
 
